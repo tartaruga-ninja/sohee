@@ -463,13 +463,22 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     artist = network.get_artist(artist_name)
     artist.get_bio_summary()
 
-    # 3. Puxar a contagem de scrobbles do artista PARA O USUÁRIO (CORREÇÃO FINAL)
+    # 3. Puxar a contagem de scrobbles do artista PARA O USUÁRIO (MÉTODO TOP ITEM)
     user_playcount = 0
+    
     try:
-        # Método mais compatível: Pede ao objeto Artist a contagem específica para o objeto User.
-        user_playcount = artist.get_userplaycount(user)
+        # Busca Top Artistas do usuário, pegando os 50 primeiros no período 'overall'.
+        top_items = user.get_top_artists(limit=50, period='overall')
+        
+        # Iteramos sobre a lista para encontrar o artista exato e pegar o peso (scrobbles).
+        for item in top_items:
+            # Compara o nome do artista no Top Item com o nome que o usuário buscou
+            if item.item.name.lower() == artist.name.lower():
+                user_playcount = item.weight
+                break
+                
     except Exception as e:
-        logger.error(f"Falha na busca de scrobbles do usuário para o artista {artist_name}: {e}. Contagem será 0.")
+        logger.error(f"Falha ao buscar Top Artistas filtrado para o usuário: {e}. Contagem será 0.")
         
     if user_playcount is None:
         user_playcount = 0
