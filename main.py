@@ -464,11 +464,16 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     artist.get_bio_summary()
 
     try:
-        user_playcount = network.get_user_artist_playcount(user=user, artist=artist)
+        # Tenta usar o método direto do objeto User
+        user_playcount = user.get_artist_scrobbles(artist)
     except Exception as e:
-        logger.warning(f"Falha ao usar get_user_artist_playcount: {e}")
-        # Se a função falhar, assume 0 para evitar quebra.
-        user_playcount = 0
+        logger.warning(f"Falha ao usar user.get_artist_scrobbles: {e}. Tentando fallback...")
+        try:
+             # Se o método acima falhar, tenta o método da network (que deu erro antes) ou 0
+             user_playcount = network.get_user_artist_playcount(user=user, artist=artist)
+        except:
+             user_playcount = 0
+             logger.error(f"Falha total ao buscar playcount do usuário para o artista {artist_name}.")
             
     if user_playcount is None:
         user_playcount = 0
