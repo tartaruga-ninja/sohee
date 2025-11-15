@@ -463,18 +463,14 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     artist = network.get_artist(artist_name)
     artist.get_bio_summary()
 
+    # 3. Puxar a contagem de scrobbles do artista PARA O USUÁRIO (CORREÇÃO FINAL)
+    user_playcount = 0
     try:
-        # Tenta usar o método direto do objeto User
-        user_playcount = user.get_artist_scrobbles(artist)
+        # Método mais compatível: Pede ao objeto Artist a contagem específica para o objeto User.
+        user_playcount = artist.get_userplaycount(user)
     except Exception as e:
-        logger.warning(f"Falha ao usar user.get_artist_scrobbles: {e}. Tentando fallback...")
-        try:
-             # Se o método acima falhar, tenta o método da network (que deu erro antes) ou 0
-             user_playcount = network.get_user_artist_playcount(user=user, artist=artist)
-        except:
-             user_playcount = 0
-             logger.error(f"Falha total ao buscar playcount do usuário para o artista {artist_name}.")
-            
+        logger.error(f"Falha na busca de scrobbles do usuário para o artista {artist_name}: {e}. Contagem será 0.")
+        
     if user_playcount is None:
         user_playcount = 0
         
@@ -483,7 +479,7 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not image_url:
         image_url = _get_lastfm_image_fallback(artist, 'artist')
         
-    # 4. Formatação da mensagem (Apenas a contagem do usuário)
+    # 4. Formatação da mensagem
     scrobbles = f"{user_playcount:,}".replace(",", ".")
     tags = [tag.item.name for tag in artist.get_top_tags(limit=5)]
     tags_str = ", ".join(tags) if tags else "Nenhuma tag encontrada"
