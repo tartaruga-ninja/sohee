@@ -463,22 +463,17 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     artist = network.get_artist(artist_name)
     artist.get_bio_summary()
 
-    # 3. Puxar a contagem de scrobbles do artista PARA O USUÁRIO (MÉTODO TOP ITEM)
-    user_playcount = 0
-    
     try:
-        # Busca Top Artistas do usuário, pegando os 50 primeiros no período 'overall'.
         top_items = user.get_top_artists(limit=50, period='overall')
         
-        # Iteramos sobre a lista para encontrar o artista exato e pegar o peso (scrobbles).
         for item in top_items:
-            # Compara o nome do artista no Top Item com o nome que o usuário buscou
             if item.item.name.lower() == artist.name.lower():
-                user_playcount = item.weight
+                # GARANTINDO QUE É UM INTEIRO ANTES DE FORMATAR
+                user_playcount = int(item.weight) 
                 break
                 
     except Exception as e:
-        logger.error(f"Falha ao buscar Top Artistas filtrado para o usuário: {e}. Contagem será 0.")
+        logger.error(f"Falha ao buscar Top Artistas filtrado para o usuário: {e}.")
         
     if user_playcount is None:
         user_playcount = 0
@@ -489,7 +484,7 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         image_url = _get_lastfm_image_fallback(artist, 'artist')
         
     # 4. Formatação da mensagem
-    scrobbles = f"{user_playcount:,}".replace(",", ".")
+    scrobbles = "{:,}".format(user_playcount).replace(",", ".") 
     tags = [tag.item.name for tag in artist.get_top_tags(limit=5)]
     tags_str = ", ".join(tags) if tags else "Nenhuma tag encontrada"
 
