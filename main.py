@@ -447,26 +447,32 @@ async def top_tracks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Busca infos de artista (Lógica de Imagem Atualizada e scrobbles do usuário)"""
     
-    # Verifica se o comando tem argumentos
+    # 1. Obter o nome do artista
     if not context.args:
         await update.message.reply_text("Formato: `/artist [nome do artista]`", parse_mode=ParseMode.MARKDOWN)
         return
     artist_name = " ".join(context.args)
-      
-    # 1. Obter o usuário Last.fm salvo
+    
+    # 2. Obter o usuário Last.fm salvo
     lastfm_user = context.user_data.get('lastfm_user')
     if not lastfm_user:
         await update.message.reply_text("Use `/set [usuario]` primeiro para ver seus scrobbles do artista.", parse_mode=ParseMode.MARKDOWN)
         return
-    
-    # 2. Conectar com o Last.fm
+      
     user = network.get_user(lastfm_user)
     artist = network.get_artist(artist_name)
     artist.get_bio_summary()
 
-    # 3. Puxar a contagem de scrobbles do artista PARA O USUÁRIO
-    user_playcount = artist.get_playcount(user=user)
-
+    try:
+        user_playcount = network.get_user_artist_playcount(user=user, artist=artist)
+    except Exception as e:
+        logger.warning(f"Falha ao usar get_user_artist_playcount: {e}")
+        # Se a função falhar, assume 0 para evitar quebra.
+        user_playcount = 0
+            
+    if user_playcount is None:
+        user_playcount = 0
+        
     # Lógica de Imagem (Mantida)
     image_url = await _get_spotify_image_url(artist.name, "", 'artist')
     if not image_url:
@@ -479,7 +485,7 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message_text = (
         f"🎤 *{artist.name}*\n\n"
-        f"👤 *Scrobbles:* {scrobbles}\n"
+        f"👤 *Seus Scrobbles:* {scrobbles}\n"
         f"🏷️ *Tags:* {tags_str}\n")
     
     await _send_with_photo_or_text(update, image_url, message_text)
