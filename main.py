@@ -146,6 +146,14 @@ async def _send_with_photo_or_text(update: Update, image_url: str, caption: str)
             logger.error(f"Erro inesperado no fallback de texto: {e}")
             await update.message.reply_text("Ocorreu um erro ao formatar esta resposta.")
 
+def _get_group_lastfm_users(context: ContextTypes.DEFAULT_TYPE) -> dict:
+    """
+    Retorna o dicionário de usuários Last.fm inscritos no chat.
+    Formato: {lastfm_username: telegram_user_id, ...}
+    """
+    if 'lastfm_users' not in context.chat_data:
+        context.chat_data['lastfm_users'] = {}
+    return context.chat_data['lastfm_users']
 
 # --- 6. NOVOS HELPERS DE IMAGEM (Spotify + Fallback) ---
 
@@ -434,31 +442,44 @@ async def top_tracks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     await update.message.reply_text("\n".join(message_lines), parse_mode=ParseMode.MARKDOWN)
   
-  
+
 @handle_lastfm_errors
 async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Busca infos de artista (Lógica de Imagem Atualizada)"""
+    """Busca infos de artista (Lógica de Imagem Atualizada e scrobbles do usuário)"""
+    
+    # Verifica se o comando tem argumentos
     if not context.args:
         await update.message.reply_text("Formato: `/artist [nome do artista]`", parse_mode=ParseMode.MARKDOWN)
         return
     artist_name = " ".join(context.args)
       
+    # 1. Obter o usuário Last.fm salvo
+    lastfm_user = context.user_data.get('lastfm_user')
+    if not lastfm_user:
+        await update.message.reply_text("Use `/set [usuario]` primeiro para ver seus scrobbles do artista.", parse_mode=ParseMode.MARKDOWN)
+        return
+    
+    # 2. Conectar com o Last.fm
+    user = network.get_user(lastfm_user)
     artist = network.get_artist(artist_name)
     artist.get_bio_summary()
 
+    # 3. Puxar a contagem de scrobbles do artista PARA O USUÁRIO
+    user_playcount = user.get_artist_playcount(artist)
+
+    # Lógica de Imagem (Mantida)
     image_url = await _get_spotify_image_url(artist.name, "", 'artist')
     if not image_url:
         image_url = _get_lastfm_image_fallback(artist, 'artist')
         
-    playcount = f"{artist.get_playcount():,}"
-    listeners = f"{artist.get_listener_count():,}"
+    # 4. Formatação da mensagem (Apenas a contagem do usuário)
+    scrobbles = f"{user_playcount:,}".replace(",", ".")
     tags = [tag.item.name for tag in artist.get_top_tags(limit=5)]
     tags_str = ", ".join(tags) if tags else "Nenhuma tag encontrada"
 
     message_text = (
         f"🎤 *{artist.name}*\n\n"
-        f"📈 *Scrobbles:* {playcount}\n"
-        f"👥 *Ouvintes:* {listeners}\n"
+        f"👤 *Scrobbles:* {scrobbles}\n"
         f"🏷️ *Tags:* {tags_str}\n")
     
     await _send_with_photo_or_text(update, image_url, message_text)
@@ -520,6 +541,84 @@ async def track_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     await _send_with_photo_or_text(update, image_url, message_text)
 
+async def join_lastfm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Permite que o usuário se inscreva no Now Listening do grupo."""
+
+    # 1. Obter o Last.fm username que o usuário salvou em /set
+    lastfm_user = context.user_data.get('lastfm_user')
+    if not lastfm_user:
+        await update.message.reply_text(
+            "Você precisa primeiro salvar seu usuário Last.fm com `/set seu_usuario` para participar do /nl.", 
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # 2. Obter a lista de usuários Last.fm do chat
+    group_users = _get_group_lastfm_users(context)
+
+    telegram_user_id = update.effective_user.id
+
+    # 3. Mapear (telegram_id -> lastfm_user) para rastrear o usuário no grupo
+    group_users[telegram_user_id] = {
+        'lastfm_user': lastfm_user,
+        'first_name': update.effective_user.first_name,
+        'username': update.effective_user.username
+    }
+
+    await update.message.reply_text(
+        f"✅ Usuário *{lastfm_user}* adicionado à lista /nl deste chat!", 
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+@handle_lastfm_errors
+async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Mostra o Now Playing de todos os usuários inscritos no chat."""
+
+    group_users = _get_group_lastfm_users(context)
+
+    if not group_users:
+        await update.message.reply_text(
+            "Nenhum usuário se inscreveu ainda para o /nl. Use `/joinfm` para participar!", 
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Mensagem de introdução
+    nl_message_lines = ["🎧 *Now Listening* do Grupo:"]
+    listening_count = 0
+
+    # Itera sobre cada usuário inscrito no grupo
+    for user_info in group_users.values():
+        lastfm_user = user_info['lastfm_user']
+        telegram_name = user_info['first_name']
+
+        try:
+            # Pylast exige que a chamada seja síncrona
+            user = network.get_user(lastfm_user)
+            now_playing = await asyncio.to_thread(user.get_now_playing)
+
+            if now_playing:
+                listening_count += 1
+
+                # Exibe o Now Playing (usando o nome do Telegram para identificação)
+                nl_message_lines.append(
+                    f"\n• *{telegram_name}* (@{lastfm_user}):\n"
+                    f"  🎵 {now_playing.title} - *{now_playing.artist.name}*"
+                )
+
+        except pylast.WSError as e:
+            # Caso o usuário Last.fm não seja mais válido, avisa (e poderia remover da lista)
+            if "user not found" in str(e).lower():
+                 nl_message_lines.append(f"\n• *{telegram_name}* (@{lastfm_user}): ❌ Usuário Last.fm não encontrado.")
+            else:
+                 logger.error(f"Erro ao buscar NP para {lastfm_user}: {e}")
+        except Exception as e:
+            logger.error(f"Erro inesperado no /nl: {e}")
+
+    if listening_count == 0 and len(group_users) > 0:
+        nl_message_lines.append("\n_Nenhum dos usuários inscritos está ouvindo algo no momento._")
+
+    await update.message.reply_text("\n".join(nl_message_lines), parse_mode=ParseMode.MARKDOWN)
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Responde a comandos não reconhecidos."""
@@ -553,11 +652,14 @@ def main():
     application.add_handler(CommandHandler("artist", artist_info))
     application.add_handler(CommandHandler("album", album_info))
     application.add_handler(CommandHandler("track", track_info))
+    application.add_handler(CommandHandler("np", now_playing))
+    application.add_handler(CommandHandler("recent", recent_tracks))
+    application.add_handler(CommandHandler("joinfm", join_lastfm))
+    application.add_handler(CommandHandler("nl", now_listening))
     
     # Handlers para mensagens desconhecidas
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_text))
-  
+ 
     logger.info("Iniciando o bot (com Spotify, correções e PERSISTÊNCIA)...")
     application.run_polling()
   
