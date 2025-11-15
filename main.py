@@ -465,7 +465,7 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     artist.get_bio_summary()
 
     # 3. Puxar a contagem de scrobbles do artista PARA O USUÁRIO
-    user_playcount = user.get_artist_playcount(artist)
+    user_playcount = artist.get_playcount(user=user)
 
     # Lógica de Imagem (Mantida)
     image_url = await _get_spotify_image_url(artist.name, "", 'artist')
@@ -564,9 +564,14 @@ async def join_lastfm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'first_name': update.effective_user.first_name,
         'username': update.effective_user.username
     }
+    user_display = update.effective_user.username
+    if user_display:
+        user_display = f"{user_display}"
+    else:
+        user_display = update.effective_user.first_name
 
     await update.message.reply_text(
-        f"✅ Usuário *{lastfm_user}* adicionado à lista /nl deste chat!", 
+        f"✅ Usuário *{user_display}* adicionado à lista /nl deste chat!", 
         parse_mode=ParseMode.MARKDOWN
     )
 
