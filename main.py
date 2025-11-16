@@ -553,8 +553,7 @@ async def track_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def join_lastfm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Permite que o usuário se inscreva no Now Listening do grupo."""
-
-    # 1. Obter o Last.fm username que o usuário salvou em /set
+    
     lastfm_user = context.user_data.get('lastfm_user')
     if not lastfm_user:
         await update.message.reply_text(
@@ -563,25 +562,26 @@ async def join_lastfm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 2. Obter a lista de usuários Last.fm do chat
     group_users = _get_group_lastfm_users(context)
-
     telegram_user_id = update.effective_user.id
-
+    
     # 3. Mapear (telegram_id -> lastfm_user) para rastrear o usuário no grupo
     group_users[telegram_user_id] = {
         'lastfm_user': lastfm_user,
+        # Salva o nome e username atuais do Telegram
         'first_name': update.effective_user.first_name,
         'username': update.effective_user.username
     }
-    user_display = update.effective_user.username
-    if user_display:
-        user_display = f"{user_display}"
-    else:
-        user_display = update.effective_user.first_name
+    
+    # --- NOVO TRECHO DE MENSAGEM ---
+    # Prioriza o First Name e adiciona @username para a lista do /nl
+    user_display = update.effective_user.first_name
+    if update.effective_user.username:
+        user_display += f" (@{update.effective_user.username})"
 
     await update.message.reply_text(
-        f"✅ Usuário *{user_display}* adicionado à lista /nl deste chat!", 
+        f"✅ Você (*{user_display}*) foi adicionado à lista /nl deste chat!\n"
+        f"Para atualizar seu nome de exibição no futuro, use `/updatefm`.",
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -611,7 +611,7 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if telegram_username:
             # Formato: *First Name* (@Username)
-            telegram_display = f"*{telegram_name}* (@{telegram_username})"
+            telegram_display = f"*{telegram_name}* - {telegram_username}"
         else:
             # Formato: Apenas *First Name*
             telegram_display = f"*{telegram_name}*"
@@ -650,6 +650,37 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unknown_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Responde a mensagens de texto que não são comandos."""
     await update.message.reply_text("Eu só respondo a comandos. Use /help.")
+
+async def update_lastfm_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Atualiza o nome de exibição do usuário na lista /nl do grupo."""
+
+    group_users = _get_group_lastfm_users(context)
+    telegram_user_id = update.effective_user.id
+
+    if telegram_user_id not in group_users:
+        await update.message.reply_text(
+            "Você não está inscrito na lista /nl deste chat. Use `/joinfm` primeiro!", 
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Atualiza as informações de exibição (Nome e Username do Telegram)
+    lastfm_user = group_users[telegram_user_id]['lastfm_user']
+
+    group_users[telegram_user_id].update({
+        'first_name': update.effective_user.first_name,
+        'username': update.effective_user.username
+    })
+
+    # Mensagem de confirmação formatada
+    user_display = update.effective_user.first_name
+    if update.effective_user.username:
+        user_display += f" (@{update.effective_user.username})"
+
+    await update.message.reply_text(
+        f"✅ Suas informações de exibição foram atualizadas para **{user_display}** na lista /nl.", 
+        parse_mode=ParseMode.MARKDOWN
+    )
   
 
 # --- 8. FUNÇÃO PRINCIPAL (MAIN) ---
@@ -679,6 +710,7 @@ def main():
     application.add_handler(CommandHandler("recent", recent_tracks))
     application.add_handler(CommandHandler("joinfm", join_lastfm))
     application.add_handler(CommandHandler("nl", now_listening))
+    application.add_handler(CommandHandler("updatefm", update_lastfm_info))
     
     # Handlers para mensagens desconhecidas
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
