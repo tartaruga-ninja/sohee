@@ -223,27 +223,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Eu sou seu bot de Last.fm.\n"
         "Para começar, salve seu nome de usuário com:\n"
         "`/set seu_usuario_lastfm`\n\n"
-        "Seus dados agora ficam salvos mesmo se eu reiniciar! Use `/help` para ver os comandos."
-    )
+        "Use `/help` para ver os comandos.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mostra a lista de comandos."""
     help_text = (
         "ℹ️ *Lista de Comandos Disponíveis* ℹ️\n\n"
-        "*Geral:*\n"
+        "🎵 *Geral:*\n"
         "/start, /help, /set `[usuario]`\n\n"
-        "*Scrobbles:*\n"
+        "*Comandos de Grupo (Use no grupo):*\n"
+        "/joinfm (Para se inscrever e aparecer no /nl)\n"
+        "/nl (Ver o que o grupo está ouvindo)\n"
+        "/updatefm (Atualiza seu nome de exibição do Telegram)\n\n"
+        "🎵 *Scrobbles:*\n"
         "/np \n"
         "/recent \n\n"
-        "*Comandos 'Top' (Período opcional):*\n"
+        "🎵 *Comandos 'Top':*\n"
         "Períodos: `7day`, `1month`, `3month`, `6month`, `12month`, `overall`\n"
         "Ex: `/topartists 1month `\n"
         "/topartists `[periodo] `\n"
         "/topalbums `[periodo] `\n"
         "/toptracks `[periodo] `\n\n"
-        "*Informações:*\n"
+        "🎵 *Informações:*\n"
         "Use `Artista - Item` para buscar.\n"
-        "/artist `[nome do artista]`\n"
+        "/artist `[nome do artista]` (Mostra seus scrobbles)\n"
         "/album `[artista] - [nome do album]`\n"
         "/track `[artista] - [nome da musica]`\n"
     )
@@ -252,11 +255,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def set_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Salva o nome de usuário (rápido, sem verificação)."""
     if not context.args:
-        await update.message.reply_text("Exemplo: `/set RjDj`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("Exemplo: `/set RIIZE`", parse_mode=ParseMode.MARKDOWN)
         return
     username = " ".join(context.args)
     context.user_data['lastfm_user'] = username
-    await update.message.reply_text(f"✅ Usuário Last.fm salvo como: {username}\nSeus dados estão persistidos!")
+    await update.message.reply_text(f"✅ Usuário Last.fm salvo como: {username}\n")
 
 
 @handle_lastfm_errors
@@ -489,7 +492,7 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message_text = (
         f"🎤 *{artist.name}*\n\n"
-        f"👤 *Scrobbles:* {scrobbles}\n"
+        f"📈 *Scrobbles:* {scrobbles}\n"
         f"🏷️ *Tags:* {tags_str}\n")
     
     await _send_with_photo_or_text(update, image_url, message_text)
@@ -558,8 +561,7 @@ async def join_lastfm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not lastfm_user:
         await update.message.reply_text(
             "Você precisa primeiro salvar seu usuário Last.fm com `/set seu_usuario` para participar do /nl.", 
-            parse_mode=ParseMode.MARKDOWN
-        )
+            parse_mode=ParseMode.MARKDOWN)
         return
 
     group_users = _get_group_lastfm_users(context)
@@ -568,22 +570,16 @@ async def join_lastfm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 3. Mapear (telegram_id -> lastfm_user) para rastrear o usuário no grupo
     group_users[telegram_user_id] = {
         'lastfm_user': lastfm_user,
-        # Salva o nome e username atuais do Telegram
         'first_name': update.effective_user.first_name,
-        'username': update.effective_user.username
-    }
+        'username': update.effective_user.username}
     
-    # --- NOVO TRECHO DE MENSAGEM ---
-    # Prioriza o First Name e adiciona @username para a lista do /nl
     user_display = update.effective_user.first_name
     if update.effective_user.username:
         user_display += f" (@{update.effective_user.username})"
 
     await update.message.reply_text(
-        f"✅ Você (*{user_display}*) foi adicionado à lista /nl deste chat!\n"
-        f"Para atualizar seu nome de exibição no futuro, use `/updatefm`.",
-        parse_mode=ParseMode.MARKDOWN
-    )
+        f"✅ Você foi adicionado à lista /nl deste chat!\n",
+        parse_mode=ParseMode.MARKDOWN)
 
 @handle_lastfm_errors
 async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -599,21 +595,18 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Emoji no cabeçalho
-    nl_message_lines = ["🎧 *Now Listening* do Grupo:"]
+    nl_message_lines = ["🎧 *Now Listening:* "]
     listening_count = 0
     
     for user_info in group_users.values():
         lastfm_user = user_info['lastfm_user']
         
-        # DEFININDO O NOME DE EXIBIÇÃO: Prioriza First Name + (@Username se existir)
         telegram_name = user_info['first_name']
         telegram_username = user_info.get('username')
         
         if telegram_username:
-            # Formato: *First Name* (@Username)
             telegram_display = f"*{telegram_name}* - {telegram_username}"
         else:
-            # Formato: Apenas *First Name*
             telegram_display = f"*{telegram_name}*"
 
         try:
@@ -623,11 +616,9 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if now_playing:
                 listening_count += 1
                 
-                # Exibe o nome e a música com o emoji 🎵 e indentação
                 nl_message_lines.append(
                     f"\n• {telegram_display}:\n"
-                    f"   🎵 {now_playing.title} - *{now_playing.artist.name}*"
-                )
+                    f"   🎵 {now_playing.title} - *{now_playing.artist.name}*")
             
         except pylast.WSError as e:
             if "user not found" in str(e).lower():
