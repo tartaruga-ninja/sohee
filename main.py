@@ -468,7 +468,6 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         for item in top_items:
             if item.item.name.lower() == artist.name.lower():
-                # GARANTINDO QUE É UM INTEIRO ANTES DE FORMATAR
                 user_playcount = int(item.weight) 
                 break
                 
@@ -490,7 +489,7 @@ async def artist_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message_text = (
         f"🎤 *{artist.name}*\n\n"
-        f"👤 *Seus Scrobbles:* {scrobbles}\n"
+        f"👤 *Scrobbles:* {scrobbles}\n"
         f"🏷️ *Tags:* {tags_str}\n")
     
     await _send_with_photo_or_text(update, image_url, message_text)
@@ -588,10 +587,10 @@ async def join_lastfm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @handle_lastfm_errors
 async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Mostra o Now Playing de todos os usuários inscritos no chat."""
-
+    """Mostra o Now Playing de todos os usuários inscritos no chat, usando o nome do Telegram."""
+    
     group_users = _get_group_lastfm_users(context)
-
+    
     if not group_users:
         await update.message.reply_text(
             "Nenhum usuário se inscreveu ainda para o /nl. Use `/joinfm` para participar!", 
@@ -599,41 +598,39 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Mensagem de introdução
     nl_message_lines = ["🎧 *Now Listening* do Grupo:"]
     listening_count = 0
-
-    # Itera sobre cada usuário inscrito no grupo
+    
     for user_info in group_users.values():
         lastfm_user = user_info['lastfm_user']
-        telegram_name = user_info['first_name']
-
+        
+        # DEFININDO O NOME DE EXIBIÇÃO: Usa o @username do Telegram se disponível, senão usa o first_name.
+        telegram_display = f"@{user_info['username']}" if user_info.get('username') else user_info['first_name']
+        
         try:
-            # Pylast exige que a chamada seja síncrona
             user = network.get_user(lastfm_user)
             now_playing = await asyncio.to_thread(user.get_now_playing)
 
             if now_playing:
                 listening_count += 1
-
-                # Exibe o Now Playing (usando o nome do Telegram para identificação)
+                
+                # Exibe o nome do Telegram (telegram_display) no lugar do Last.fm username.
                 nl_message_lines.append(
-                    f"\n• *{telegram_name}* (@{lastfm_user}):\n"
-                    f"  🎵 {now_playing.title} - *{now_playing.artist.name}*"
+                    f"\n• *{telegram_display}*:\n"
+                    f"  🎵 {now_playing.title} - *{now_playing.artist.name}* (Last.fm: `{lastfm_user}`)"
                 )
-
+            
         except pylast.WSError as e:
-            # Caso o usuário Last.fm não seja mais válido, avisa (e poderia remover da lista)
             if "user not found" in str(e).lower():
-                 nl_message_lines.append(f"\n• *{telegram_name}* (@{lastfm_user}): ❌ Usuário Last.fm não encontrado.")
+                 nl_message_lines.append(f"\n• *{telegram_display}*: ❌ Usuário Last.fm não encontrado.")
             else:
                  logger.error(f"Erro ao buscar NP para {lastfm_user}: {e}")
         except Exception as e:
             logger.error(f"Erro inesperado no /nl: {e}")
-
+            
     if listening_count == 0 and len(group_users) > 0:
         nl_message_lines.append("\n_Nenhum dos usuários inscritos está ouvindo algo no momento._")
-
+        
     await update.message.reply_text("\n".join(nl_message_lines), parse_mode=ParseMode.MARKDOWN)
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
