@@ -604,9 +604,17 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user_info in group_users.values():
         lastfm_user = user_info['lastfm_user']
         
-        # DEFININDO O NOME DE EXIBIÇÃO: Usa o @username do Telegram se disponível, senão usa o first_name.
-        telegram_display = f"@{user_info['username']}" if user_info.get('username') else user_info['first_name']
+        # DEFININDO O NOME DE EXIBIÇÃO: Prioriza First Name + (@Username se existir)
+        telegram_name = user_info['first_name']
+        telegram_username = user_info.get('username')
         
+        if telegram_username:
+            # Formato: First Name (@Username)
+            telegram_display = f"*{telegram_name}* (@{telegram_username})"
+        else:
+            # Formato: Apenas First Name (se não tiver username)
+            telegram_display = f"*{telegram_name}*"
+
         try:
             user = network.get_user(lastfm_user)
             now_playing = await asyncio.to_thread(user.get_now_playing)
@@ -614,15 +622,15 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if now_playing:
                 listening_count += 1
                 
-                # Exibe o nome do Telegram (telegram_display) no lugar do Last.fm username.
+                # Exibe o nome no formato solicitado (com indentação de 3 espaços)
                 nl_message_lines.append(
-                    f"\n• *{telegram_display}*:\n"
-                    f"  🎵 {now_playing.title} - *{now_playing.artist.name}* (Last.fm: `{lastfm_user}`)"
+                    f"\n• {telegram_display}:\n"
+                    f"   {now_playing.title} - *{now_playing.artist.name}*"
                 )
             
         except pylast.WSError as e:
             if "user not found" in str(e).lower():
-                 nl_message_lines.append(f"\n• *{telegram_display}*: ❌ Usuário Last.fm não encontrado.")
+                 nl_message_lines.append(f"\n• {telegram_display}: ❌ Usuário Last.fm não encontrado.")
             else:
                  logger.error(f"Erro ao buscar NP para {lastfm_user}: {e}")
         except Exception as e:
