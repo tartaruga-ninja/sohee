@@ -598,6 +598,7 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Emoji no cabeçalho
     nl_message_lines = ["🎧 *Now Listening* do Grupo:"]
     listening_count = 0
     
@@ -609,10 +610,10 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_username = user_info.get('username')
         
         if telegram_username:
-            # Formato: First Name (@Username)
+            # Formato: *First Name* (@Username)
             telegram_display = f"*{telegram_name}* (@{telegram_username})"
         else:
-            # Formato: Apenas First Name (se não tiver username)
+            # Formato: Apenas *First Name*
             telegram_display = f"*{telegram_name}*"
 
         try:
@@ -622,10 +623,10 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if now_playing:
                 listening_count += 1
                 
-                # Exibe o nome no formato solicitado (com indentação de 3 espaços)
+                # Exibe o nome e a música com o emoji 🎵 e indentação
                 nl_message_lines.append(
                     f"\n• {telegram_display}:\n"
-                    f"   {now_playing.title} - *{now_playing.artist.name}*"
+                    f"   🎵 {now_playing.title} - *{now_playing.artist.name}*"
                 )
             
         except pylast.WSError as e:
@@ -637,7 +638,8 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Erro inesperado no /nl: {e}")
             
     if listening_count == 0 and len(group_users) > 0:
-        nl_message_lines.append("\n_Nenhum dos usuários inscritos está ouvindo algo no momento._")
+        # Emoji no rodapé
+        nl_message_lines.append("\n_Nenhum dos usuários inscritos está ouvindo algo no momento. 😴_")
         
     await update.message.reply_text("\n".join(nl_message_lines), parse_mode=ParseMode.MARKDOWN)
 
