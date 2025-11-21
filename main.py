@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, ContextTypes, MessageHandler, filters,
-    PicklePersistence  # <<< CORREÇÃO DE PERSISTÊNCIA (1/2): Importa
+    PicklePersistence
 )
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
@@ -213,7 +213,7 @@ def _get_lastfm_image_fallback(pylast_item, item_type: str = 'album') -> str | N
                 return None
 
 
-# --- 7. COMANDOS DO BOT (COM CORREÇÕES DE NOME/FUSO) ---
+# --- 7. COMANDOS DO BOT ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Envia a mensagem de boas-vindas."""
@@ -634,14 +634,6 @@ async def now_listening(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     await update.message.reply_text("\n".join(nl_message_lines), parse_mode=ParseMode.MARKDOWN)
 
-async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Responde a comandos não reconhecidos."""
-    await update.message.reply_text("Desculpe, não entendi. Use /help.")
-
-async def unknown_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Responde a mensagens de texto que não são comandos."""
-    await update.message.reply_text("Eu só respondo a comandos. Use /help.")
-
 async def update_lastfm_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Atualiza o nome de exibição do usuário na lista /nl do grupo."""
 
@@ -703,8 +695,7 @@ def main():
     application.add_handler(CommandHandler("nl", now_listening))
     application.add_handler(CommandHandler("updatefm", update_lastfm_info))
     
-    # Handlers para mensagens desconhecidas
-    application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+    # --- REMOVIDO HANDLER DE MENSAGEM DESCONHECIDA AQUI ---
  
     logger.info("Iniciando o bot (com Spotify, correções e PERSISTÊNCIA)...")
     application.run_polling()
